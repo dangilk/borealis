@@ -1,0 +1,2 @@
+# borealis
+Scala Bgg Scraper
