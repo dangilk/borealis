@@ -3,19 +3,23 @@ package controllers
 import javax.inject._
 import play.api._
 import play.api.mvc._
-import play.api.libs.ws._
+import services._
 import scala.concurrent.Future
-import scala.concurrent._
-import ExecutionContext.Implicits.global
+import akka.actor._
+import akka.pattern.ask
+import akka.util.Timeout
+import actors.ScraperActor._
+import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
+
 /**
  * This controller creates an `Action` to handle HTTP requests to the
  * application's home page.
  */
 @Singleton
-class HomeController @Inject()(cc: ControllerComponents) (ws: WSClient) extends AbstractController(cc) {
-
-  val baseUrlApi2 = "https://www.boardgamegeek.com/xmlapi2"
-  val baseUrlApi1 = "https://www.boardgamegeek.com/xmlapi"
+class HomeController @Inject()(cc: ControllerComponents, @Named("scraper-actor") scraperActor: ActorRef)
+    (implicit ec: ExecutionContext) extends AbstractController(cc) {
+  implicit val timeout: Timeout = 5.seconds
   /**
    * Create an Action to render an HTML page.
    *
@@ -27,12 +31,9 @@ class HomeController @Inject()(cc: ControllerComponents) (ws: WSClient) extends 
     Ok(views.html.index())
   }
 
-  def getForumList() = Action.async {
-    val forumListUrl = baseUrlApi2 + "/forumlist?id=%d&type=thing".format(10)
-    val request: WSRequest = ws.url(forumListUrl)
-    request.get().map { response =>
-      // do a little xml parsing here for fun
-      Ok((response.xml \ "forum").mkString)
+  def checkStatus() = Action.async {
+    (scraperActor ? CheckStatus()).mapTo[String].map { message =>
+      Ok(message)
     }
   }
 
