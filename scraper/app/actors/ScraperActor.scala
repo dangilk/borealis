@@ -12,6 +12,8 @@ import java.util.concurrent.TimeUnit
 // we can use a mutable queue because we only modify it within atomic message sends
 import scala.collection.mutable.{ Queue => Q }
 import scala.collection.mutable.Set
+import play.api.db.slick._
+import slick.jdbc.JdbcProfile
 
 object ScraperActor {
   def props = Props[ScraperActor]
@@ -26,7 +28,9 @@ object ScraperActor {
   case class GetCollection(username: String)
 }
 
-class ScraperActor @Inject() (ws: WSClient, as: ActorSystem) extends Actor {
+class ScraperActor @Inject() (ws: WSClient, as: ActorSystem,
+  protected val dbConfigProvider: DatabaseConfigProvider) extends Actor with HasDatabaseConfigProvider[JdbcProfile] {
+  import profile.api._
   val baseUrlApi2 = "https://www.boardgamegeek.com/xmlapi2"
   val baseUrlApi1 = "https://www.boardgamegeek.com/xmlapi"
   var requestQueue: Q[Any] = Q[Any]()
@@ -134,7 +138,6 @@ class ScraperActor @Inject() (ws: WSClient, as: ActorSystem) extends Actor {
     val request: WSRequest = ws.url(userUrl)
     request.get().map { response =>
       val xml = response.xml
-      Logger.info(s"user xml: $xml")
       val nameElem = xml \ "@name"
       val name = nameElem.text
       val idElem = xml \ "@id"
@@ -148,7 +151,17 @@ class ScraperActor @Inject() (ws: WSClient, as: ActorSystem) extends Actor {
   }
 
   def getCollection(username: String) {
-
+    val collectionUrl = baseUrlApi1 + "/collection/%s".format(username)
+    val request: WSRequest = ws.url(collectionUrl)
+    request.get().map { response =>
+      if (response.status == 202) {
+        // got a retry response
+        self ! EnqueueNetworkRequest(GetCollection(username))
+      } else if (response.status == 200) {
+        val xml = response.xml
+        Logger.info(s"collection xml: $xml")
+      }
+    }
   }
 
   // start the scraper
