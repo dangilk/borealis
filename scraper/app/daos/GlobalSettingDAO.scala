@@ -16,7 +16,11 @@ class GlobalSettingDAO @Inject() (protected val dbConfigProvider: DatabaseConfig
 
   def all(): Future[Seq[GlobalSetting]] = db.run(GlobalSettings.result)
 
+  def upsert(globalSetting: GlobalSetting): Future[Unit] = db.run(GlobalSettings.insertOrUpdate(globalSetting)).map { _ => () }
+
   def insert(globalSetting: GlobalSetting): Future[Unit] = db.run(GlobalSettings += globalSetting).map { _ => () }
+
+  def get(key: String): Future[Option[GlobalSetting]] = db.run(GlobalSettings.filter(_.key === key).result.headOption)
 
   class GlobalSettingsTable(tag: Tag) extends Table[GlobalSetting](tag, "GLOBAL_SETTING") {
     def key = column[String]("KEY", O.PrimaryKey)

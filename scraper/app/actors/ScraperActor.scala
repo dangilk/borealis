@@ -36,8 +36,7 @@ class ScraperActor @Inject() (ws: WSClient, as: ActorSystem, gameDAO: GameDAO, u
     var requestQueue: Q[Any] = Q[Any]()
     val testMode = false
     val exploredUsers: Set[String] = Set[String]()
-
-    Logger.info("create scraper actor");
+    val CURRENT_FORUMLIST_ID = "CURRENT_FORUMLIST_ID"
 
     override def preStart(): Unit = {
       as.scheduler.schedule(
@@ -52,7 +51,21 @@ class ScraperActor @Inject() (ws: WSClient, as: ActorSystem, gameDAO: GameDAO, u
       case CheckStatus() =>
       sender() ! "Hello"
       case DequeueNetworkRequest() => {
-        if (!requestQueue.isEmpty) {
+        if (requestQueue.isEmpty) {
+          // get current forumlistid
+          globalSettingsDAO.get(CURRENT_FORUMLIST_ID).onComplete({
+            case Success(value) => {
+              val forumListId = value.getOrElse(GlobalSetting(CURRENT_FORUMLIST_ID, "1")).value
+              getForumList(forumListId)
+
+              val nextForumListId = forumListId.toInt + 1
+              globalSettingsDAO.upsert(GlobalSetting(CURRENT_FORUMLIST_ID, s"$nextForumListId"))
+            }
+            case Failure(e) => {
+              Logger.error("could not get forum list id", e)
+            }
+          })
+        } else {
           val msg = requestQueue.dequeue
           self ! msg
         }
@@ -85,7 +98,6 @@ class ScraperActor @Inject() (ws: WSClient, as: ActorSystem, gameDAO: GameDAO, u
           if (!testMode || i == 0) {
             val idElem = n \ "@id"
             val id = idElem.text
-            Logger.info(s"forumId: $id")
             //getForum(id)
             self ! EnqueueNetworkRequest(GetForum(id))
           }
@@ -109,7 +121,6 @@ class ScraperActor @Inject() (ws: WSClient, as: ActorSystem, gameDAO: GameDAO, u
           if (!testMode || i == 0) {
             val idElem = n \ "@id"
             val id = idElem.text
-            Logger.info(s"threadId: $id")
             self ! EnqueueNetworkRequest(GetThread(id))
           }
         }
@@ -117,6 +128,7 @@ class ScraperActor @Inject() (ws: WSClient, as: ActorSystem, gameDAO: GameDAO, u
     }
 
     def getThread(id: String) = {
+      Logger.info(s"get thread: $id")
       val threadUrl = baseUrlApi2 + "/thread?id=%s".format(id)
       val request: WSRequest = ws.url(threadUrl)
       request.get().map { response =>
@@ -168,16 +180,13 @@ class ScraperActor @Inject() (ws: WSClient, as: ActorSystem, gameDAO: GameDAO, u
             val xml = response.xml
             //Logger.info(s"got collection: $xml")
             val itemElems = xml \ "item"
-            Logger.info("items length: " + itemElems.length)
             itemElems.zipWithIndex foreach { case(item, i) =>
               if (!testMode || i == 0) {
                 // game data:
 
                 val gameId = (item \ "@objectid").text
                 val name = (item \ "name").text
-                Logger.info(s"game name: $name")
                 val yearPublished = (item \ "yearpublished").text.toInt
-                Logger.info(s"year published: $yearPublished")
                 val imageUrl = (item \ "image").text
                 val subType = (item \ "@subtype").text
                 val statsElem = (item \ "stats")
@@ -196,9 +205,8 @@ class ScraperActor @Inject() (ws: WSClient, as: ActorSystem, gameDAO: GameDAO, u
                 gameDAO.insert(Game(gameId, name, yearPublished, imageUrl,
                   subType, minPlayers, maxPlayers, minPlaytime, maxPlaytime,
                   playingTime, numOwned, usersRated, averageRating, bayesAverageRating,
-                  stdDevRating, medianRating)).onComplete({case Success(value) => Logger.info("inserted game" + value)
-                  case Failure(e) => Logger.info("error inserting game", e)})
-                  Logger.info(s"inserted game $name")
+                  stdDevRating, medianRating)).onComplete({case Success(value) => Logger.info(s"inserted game: $name")
+                  case Failure(e) => Logger.error("error inserting game", e)})
 
                   // user collection data:
                   val collectionId = (item \ "@collid").text
@@ -218,13 +226,13 @@ class ScraperActor @Inject() (ws: WSClient, as: ActorSystem, gameDAO: GameDAO, u
                   userCollectionDAO.insert(UserCollection(collectionId, user.id, gameId, numPlays,
                     own, prevOwned, forTrade, want, wantToPlay, wantToBuy,
                     wishlist, wishlistPriority, preOrdered, lastModified, userRating))
-                    Logger.info(s"inserted collection $collectionId")
+                    .onComplete({case Success(value) => Logger.info(s"inserted collection: $collectionId")
+                    case Failure(e) => Logger.error("error inserting collection", e)})
                   }
                 }
               } catch {
                 case e: Throwable => {
                   Logger.info("error", e)
-                  self ! EnqueueNetworkRequest(GetCollection(user))
                 }
               }
             }
@@ -232,5 +240,5 @@ class ScraperActor @Inject() (ws: WSClient, as: ActorSystem, gameDAO: GameDAO, u
         }
 
         // start the scraper
-        self ! EnqueueNetworkRequest(GetForumList("10"))
+        //self ! EnqueueNetworkRequest(GetForumList("10"))
       }

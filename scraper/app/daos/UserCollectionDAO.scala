@@ -16,6 +16,8 @@ class UserCollectionDAO @Inject() (protected val dbConfigProvider: DatabaseConfi
 
   def all(): Future[Seq[UserCollection]] = db.run(UserCollections.result)
 
+  def upsert(userCollection: UserCollection): Future[Unit] = db.run(UserCollections.insertOrUpdate(userCollection)).map { _ => () }
+
   def insert(userCollection: UserCollection): Future[Unit] = db.run(UserCollections += userCollection).map { _ => () }
 
   private class UserCollectionsTable(tag: Tag) extends Table[UserCollection](tag, "USER_COLLECTION") {
