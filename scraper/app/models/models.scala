@@ -8,7 +8,7 @@ stdDevRating: Double, medianRating: Double)
 
 case class User(id: String, name: String)
 
-case class UserCollection(id: Int, userId: String, gameId: String,
+case class UserCollection(id: String, userId: String, gameId: String,
 numPlays: Int, own: Boolean, prevOwned: Boolean, forTrade: Boolean,
 want: Boolean, wantToPlay: Boolean, wantToBuy: Boolean,
 wishList: Boolean, wishListPriority: Int, preOrdered: Boolean,

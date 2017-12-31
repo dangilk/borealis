@@ -1,7 +1,8 @@
-*.class
+*class
 *.log
 .DS_Store
 .g8
+*.db
 
 # general
 *~

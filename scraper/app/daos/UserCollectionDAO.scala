@@ -19,7 +19,7 @@ class UserCollectionDAO @Inject() (protected val dbConfigProvider: DatabaseConfi
   def insert(userCollection: UserCollection): Future[Unit] = db.run(UserCollections += userCollection).map { _ => () }
 
   private class UserCollectionsTable(tag: Tag) extends Table[UserCollection](tag, "USER_COLLECTION") {
-    def id = column[Int]("ID", O.PrimaryKey, O.AutoInc)
+    def id = column[String]("ID", O.PrimaryKey)
     def userId = column[String]("USER_ID")
     def gameId = column[String]("GAME_ID")
     def numPlays = column[Int]("NUM_PLAYS")
