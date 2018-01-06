@@ -15,7 +15,18 @@ libraryDependencies ++= Seq(
   "com.typesafe.play" %% "play-slick" % "3.0.0",
   "com.typesafe.play" %% "play-slick-evolutions" % "3.0.0"
 )
+// sbt-docker config
+enablePlugins(sbtdocker.DockerPlugin, JavaAppPackaging)
+dockerfile in docker := {
+  val appDir: File = stage.value
+  val targetDir = "/app"
 
+  new Dockerfile {
+    from("java")
+    entryPoint(s"$targetDir/bin/${executableScriptName.value}")
+    copy(appDir, targetDir, chown = "daemon:daemon")
+  }
+}
 // Adds additional packages into Twirl
 //TwirlKeys.templateImports += "com.djgilk.controllers._"
 
